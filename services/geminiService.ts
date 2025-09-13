@@ -1,7 +1,7 @@
 import { GoogleGenAI, Modality, Type } from "@google/genai";
 import type { GenerateContentResponse, Part } from "@google/genai";
 import { BACKGROUND_THEMES, LIGHTING_MOODS } from "../constants";
-import type { StyleRecommendation } from "../types";
+import type { StyleRecommendation, MarketingCopy } from "../types";
 
 const API_KEY = process.env.API_KEY;
 
@@ -131,5 +131,64 @@ export async function getStyleRecommendation(
     console.error("Error getting style recommendation:", error);
     const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while getting recommendations.";
     throw new Error(`Failed to get style recommendation: ${errorMessage}`);
+  }
+}
+
+export async function generateMarketingCopy(
+  base64ImageData: string,
+  mimeType: string
+): Promise<MarketingCopy> {
+  try {
+    const prompt = `Analyze the product in this image. As an expert marketing copywriter, generate compelling content for an e-commerce listing or social media post.
+
+    Provide the following in a JSON object:
+    1.  "headlines": An array of 2-3 catchy, attention-grabbing headlines.
+    2.  "body": An array of 1-2 short paragraphs describing the product's benefits and features.
+    3.  "hashtags": An array of 5-7 relevant and popular hashtags.`;
+
+    const imagePart: Part = {
+      inlineData: {
+        data: base64ImageData,
+        mimeType: mimeType,
+      },
+    };
+
+    const textPart: Part = {
+      text: prompt,
+    };
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: { parts: [imagePart, textPart] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            headlines: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            body: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+            hashtags: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+            },
+          },
+          required: ["headlines", "body", "hashtags"],
+        },
+      },
+    });
+
+    const jsonStr = response.text.trim();
+    return JSON.parse(jsonStr) as MarketingCopy;
+
+  } catch (error) {
+    console.error("Error generating marketing copy:", error);
+    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while generating copy.";
+    throw new Error(`Failed to generate marketing copy: ${errorMessage}`);
   }
 }
