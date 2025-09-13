@@ -1,3 +1,5 @@
+
+// FIX: Remove self-import of `UploadedImage`
 // FIX: Define types for the application state and API responses.
 export interface UploadedImage {
   id: string;
@@ -30,3 +32,13 @@ export interface CustomBackgroundImage {
   base64: string;
   mimeType: string;
 }
+
+export interface CampaignDay {
+  day: number;
+  theme: string;
+  caption: string;
+  hashtags: string[];
+  callToAction: string;
+}
+
+export type CampaignPlan = CampaignDay[];

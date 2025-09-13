@@ -1,13 +1,15 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>PhotoSet Pro</title>
+    <title>BrandSpark</title>
     <script src="https://cdn.tailwindcss.com"></script>
-  <script type="importmap">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script type="importmap">
 {
   "imports": {
     "react/": "https://aistudiocdn.com/react@^19.1.1/",
@@ -17,8 +19,55 @@
   }
 }
 </script>
+    <style>
+      body {
+        font-family: 'Inter', sans-serif;
+        background-color: #0A0918;
+        background-image: radial-gradient(at 27% 37%, hsla(215, 98%, 61%, 0.1) 0px, transparent 50%), 
+                          radial-gradient(at 77% 82%, hsla(276, 96%, 61%, 0.1) 0px, transparent 50%);
+      }
+      .glass-card {
+        background: rgba(16, 18, 27, 0.4);
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      }
+      .btn-primary {
+        background-image: linear-gradient(to right, #4f46e5, #d946ef);
+        transition: all 0.3s ease;
+      }
+      .btn-primary:hover {
+        box-shadow: 0 0 20px rgba(217, 70, 239, 0.5), 0 0 20px rgba(79, 70, 229, 0.5);
+      }
+      .card-glow-border {
+        position: relative;
+        background: #111827;
+        border: 1px solid transparent;
+        background-clip: padding-box;
+      }
+      .card-glow-border::before {
+        content: '';
+        position: absolute;
+        top: 0; right: 0; bottom: 0; left: 0;
+        z-index: -1;
+        margin: -1px;
+        border-radius: inherit;
+        background: linear-gradient(to right, #4f46e5, #d946ef);
+      }
+      .animate-reveal {
+        animation: reveal 0.5s ease-out forwards;
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      @keyframes reveal {
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    </style>
 </head>
-  <body class="bg-gray-900 text-gray-100 font-sans">
+  <body class="text-gray-200 font-sans">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
