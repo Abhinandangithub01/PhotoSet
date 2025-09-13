@@ -1,194 +1,143 @@
 import { GoogleGenAI, Modality, Type } from "@google/genai";
-import type { GenerateContentResponse, Part } from "@google/genai";
-import { BACKGROUND_THEMES, LIGHTING_MOODS } from "../constants";
-import type { StyleRecommendation, MarketingCopy } from "../types";
+import type { MarketingCopy, UploadedImage } from "../types";
 
-const API_KEY = process.env.API_KEY;
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
-if (!API_KEY) {
-  throw new Error("API_KEY environment variable is not set.");
-}
+export async function generateEnhancedImage(
+  originalImage: { base64: string; mimeType: string },
+  prompt: string,
+  customBackground?: { base64: string; mimeType: string }
+): Promise<string> {
+  const model = 'gemini-2.5-flash-image-preview';
 
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
-export async function enhanceProductPhoto(
-  base64ImageData: string,
-  mimeType: string,
-  backgroundTheme: string,
-  lightingMood: string
-): Promise<{ imageUrl: string; text: string }> {
-  try {
-    const prompt = `You are an expert AI photo editor specialized in product photography enhancement.
-The user has uploaded a product photo that should remain the visual focal point.
-Your task is to generate a professional-style product photoshoot image by:
-1.  Seamlessly blending the product into a background theme described as: "${backgroundTheme}"
-2.  Applying lighting and shadow effects described as: "${lightingMood}"
-3.  Enhancing the product’s colors and details to make it pop without altering its natural appearance.
-4.  Maintaining high resolution suitable for e-commerce presentation and social media.
-5.  Composing the photo with visual balance, leaving clean space around the product for marketing overlays.
-6.  Use a realistic photographic style unless the theme requests a more artistic or stylized look.
-Apply these adjustments focused on the uploaded product image.
-Generate a cohesive, market-ready product photo incorporating user preferences. Do not add any text or watermark to the generated image.`;
-
-    const imagePart: Part = {
+  const parts: ({ text: string } | { inlineData: { data: string, mimeType: string }})[] = [
+    {
       inlineData: {
-        data: base64ImageData,
-        mimeType: mimeType,
+        data: originalImage.base64,
+        mimeType: originalImage.mimeType,
       },
-    };
-
-    const textPart: Part = {
-      text: prompt,
-    };
-
-    const response: GenerateContentResponse = await ai.models.generateContent({
-      model: 'gemini-2.5-flash-image-preview',
-      contents: {
-        parts: [imagePart, textPart],
-      },
-      config: {
-        responseModalities: [Modality.IMAGE, Modality.TEXT],
-      },
-    });
-    
-    let generatedImageUrl = '';
-    let generatedText = 'No descriptive text was generated.';
-
-    for (const part of response.candidates[0].content.parts) {
-      if (part.text) {
-        generatedText = part.text;
-      } else if (part.inlineData) {
-        const base64ImageBytes: string = part.inlineData.data;
-        generatedImageUrl = `data:${part.inlineData.mimeType};base64,${base64ImageBytes}`;
-      }
     }
+  ];
 
-    if (!generatedImageUrl) {
-      throw new Error("The AI did not return an image. Please try again.");
-    }
-    
-    return { imageUrl: generatedImageUrl, text: generatedText };
+  let fullPrompt: string;
 
-  } catch (error) {
-    console.error("Error enhancing photo:", error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during image generation.";
-    throw new Error(`Failed to enhance photo: ${errorMessage}`);
-  }
-}
-
-
-export async function getStyleRecommendation(
-  base64ImageData: string,
-  mimeType: string
-): Promise<StyleRecommendation> {
-  try {
-    const prompt = `As a professional product photographer, analyze the following product image. Based on the product's characteristics (type, color, texture, likely target audience), suggest the optimal background and lighting.
-
-    Choose one background theme from this list: ${BACKGROUND_THEMES.join(', ')}.
-    Choose one lighting mood from this list: ${LIGHTING_MOODS.join(', ')}.
-
-    Provide a brief reasoning for your choices, explaining why they would make the product more appealing for e-commerce.
-
-    Return ONLY a valid JSON object with the keys "backgroundTheme", "lightingMood", and "reasoning".`;
-    
-    const imagePart: Part = {
-      inlineData: {
-        data: base64ImageData,
-        mimeType: mimeType,
-      },
-    };
-
-    const textPart: Part = {
-      text: prompt,
-    };
-
-    const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: { parts: [imagePart, textPart] },
-        config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-                type: Type.OBJECT,
-                properties: {
-                    backgroundTheme: { type: Type.STRING },
-                    lightingMood: { type: Type.STRING },
-                    reasoning: { type: Type.STRING },
-                },
-                required: ["backgroundTheme", "lightingMood", "reasoning"],
-            },
+  if (customBackground) {
+    parts.push({
+        inlineData: {
+            data: customBackground.base64,
+            mimeType: customBackground.mimeType,
         },
     });
-
-    const jsonStr = response.text.trim();
-    const recommendation = JSON.parse(jsonStr) as StyleRecommendation;
-
-    if (!BACKGROUND_THEMES.includes(recommendation.backgroundTheme) || !LIGHTING_MOODS.includes(recommendation.lightingMood)) {
-        console.warn("AI returned values not in the predefined lists.", recommendation);
-    }
-
-    return recommendation;
-  } catch (error) {
-    console.error("Error getting style recommendation:", error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while getting recommendations.";
-    throw new Error(`Failed to get style recommendation: ${errorMessage}`);
+    fullPrompt = `You are an expert AI photo editor. Seamlessly blend the first image (the product) into the second image (the background). The product should be the main visual focus. Apply lighting and shadow effects described as: "${prompt}". Enhance the product’s colors and details to make it pop without altering its natural appearance. The final result should be a single, cohesive, photorealistic image.`;
+  } else {
+    fullPrompt = `Given the product image, place it in a photorealistic scene based on the following description: "${prompt}". The final image should be a high-quality, professional product shot. Do not add any text or logos. Focus on realistic composition, lighting, and shadows.`;
   }
+
+  parts.push({ text: fullPrompt });
+
+  const response = await ai.models.generateContent({
+    model: model,
+    contents: { parts },
+    config: {
+      responseModalities: [Modality.IMAGE, Modality.TEXT],
+    },
+  });
+
+  for (const candidate of response.candidates) {
+      for (const part of candidate.content.parts) {
+          if (part.inlineData) {
+              return part.inlineData.data;
+          }
+      }
+  }
+
+  throw new Error("No image was generated. The model may have refused the request.");
 }
+
+export async function generateSceneSuggestion(
+  base64: string,
+  mimeType: string
+): Promise<string> {
+  const model = 'gemini-2.5-flash';
+  const prompt = "You are a professional product photographer and food stylist. Analyze the product in this image. Suggest a single, descriptive scene composition for a product photoshoot. The suggestion should include relevant background elements and complementary props. For example, for potato chips, suggest 'A rustic wooden table with scattered whole potatoes and fresh spices'. Respond with only the descriptive sentence.";
+
+  const imagePart = {
+    inlineData: {
+      data: base64,
+      mimeType: mimeType,
+    },
+  };
+  const textPart = { text: prompt };
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: { parts: [imagePart, textPart] },
+  });
+
+  return response.text.trim();
+}
+
 
 export async function generateMarketingCopy(
-  base64ImageData: string,
+  base64: string,
   mimeType: string
 ): Promise<MarketingCopy> {
+  const model = 'gemini-2.5-flash';
+
+  const prompt = "Analyze the product in this image and generate compelling marketing copy. Provide three short, catchy headlines, a descriptive body paragraph (2-3 sentences), and a list of 5-7 relevant social media hashtags.";
+
+  const imagePart = {
+    inlineData: {
+      data: base64,
+      mimeType: mimeType,
+    },
+  };
+
+  const textPart = { text: prompt };
+
+  const copySchema = {
+    type: Type.OBJECT,
+    properties: {
+      headlines: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "Three short, catchy headlines for the product."
+      },
+      body: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "A descriptive body paragraph (2-3 sentences) for the product."
+      },
+      hashtags: {
+        type: Type.ARRAY,
+        items: { type: Type.STRING },
+        description: "A list of 5-7 relevant social media hashtags, without the '#' symbol."
+      },
+    },
+    required: ["headlines", "body", "hashtags"],
+  };
+
+  const response = await ai.models.generateContent({
+    model: model,
+    contents: { parts: [imagePart, textPart] },
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: copySchema,
+    },
+  });
+
+  const jsonText = response.text.trim();
   try {
-    const prompt = `Analyze the product in this image. As an expert marketing copywriter, generate compelling content for an e-commerce listing or social media post.
-
-    Provide the following in a JSON object:
-    1.  "headlines": An array of 2-3 catchy, attention-grabbing headlines.
-    2.  "body": An array of 1-2 short paragraphs describing the product's benefits and features.
-    3.  "hashtags": An array of 5-7 relevant and popular hashtags.`;
-
-    const imagePart: Part = {
-      inlineData: {
-        data: base64ImageData,
-        mimeType: mimeType,
-      },
-    };
-
-    const textPart: Part = {
-      text: prompt,
-    };
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: { parts: [imagePart, textPart] },
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            headlines: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            body: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-            hashtags: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-            },
-          },
-          required: ["headlines", "body", "hashtags"],
-        },
-      },
-    });
-
-    const jsonStr = response.text.trim();
-    return JSON.parse(jsonStr) as MarketingCopy;
-
-  } catch (error) {
-    console.error("Error generating marketing copy:", error);
-    const errorMessage = error instanceof Error ? error.message : "An unknown error occurred while generating copy.";
-    throw new Error(`Failed to generate marketing copy: ${errorMessage}`);
+    const parsed = JSON.parse(jsonText);
+    if (parsed.hashtags && Array.isArray(parsed.hashtags)) {
+        parsed.hashtags = parsed.hashtags
+            .flatMap((h: string) => h.split(' '))
+            .map((h: string) => `#${h.replace(/#/g, '')}`)
+            .filter((h: string) => h.length > 1);
+    }
+    return parsed;
+  } catch (e) {
+    console.error("Failed to parse JSON response from Gemini:", jsonText);
+    throw new Error("The AI returned an invalid response. Please try again.");
   }
 }
